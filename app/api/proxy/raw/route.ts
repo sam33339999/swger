@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { parseSwaggerContent } from '../../utils/parser';
 
 export async function GET(request: NextRequest) {
   // 從URL參數中獲取目標URL
@@ -27,25 +26,15 @@ export async function GET(request: NextRequest) {
       );
     }
     
-    // 獲取響應內容
+    // 獲取原始內容
     const textContent = await response.text();
     
-    try {
-      // 使用我們的解析函數處理內容（支持 JSON 和 YAML）
-      const data = await parseSwaggerContent(textContent);
-      
-      // 返回代理的響應
-      return NextResponse.json({ success: true, data });
-    } catch (parseError) {
-      console.error('解析 Swagger 文件失敗:', parseError);
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: parseError instanceof Error ? parseError.message : '解析 Swagger 文件失敗' 
-        },
-        { status: 400 }
-      );
-    }
+    // 返回原始內容
+    return new Response(textContent, {
+      headers: {
+        'Content-Type': 'text/plain',
+      },
+    });
   } catch (error) {
     console.error('代理請求失敗:', error);
     return NextResponse.json(

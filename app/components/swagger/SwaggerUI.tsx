@@ -8,7 +8,10 @@ import {
   faExclamationTriangle,
   faCode,
   faBook,
-  faKey
+  faKey,
+  faFileCode,
+  faExchangeAlt,
+  faEye
 } from '@fortawesome/free-solid-svg-icons';
 import Image from 'next/image';
 import { SwaggerDocument } from '../../types';
@@ -20,7 +23,8 @@ import ApiOperation from './ApiOperation';
 import LoginForm from '../auth/LoginForm';
 import BearerTokenForm from '../auth/BearerTokenForm';
 import ApiExplorer from './ApiExplorer';
-import { Dialog, DialogContent } from '../ui/Dialog';
+import { Dialog, DialogContent, DialogTitle } from '../ui/Dialog';
+import { detectSwaggerFormat, convertSwaggerFormat } from '../../utils/parser';
 
 interface SwaggerUIProps {
   defaultSwaggerUrl?: string;
@@ -39,7 +43,10 @@ const SwaggerUI: React.FC<SwaggerUIProps> = ({
   const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
   const [showLoginForm, setShowLoginForm] = useState<boolean>(false);
   const [showBearerTokenForm, setShowBearerTokenForm] = useState<boolean>(false);
-  
+  const [swaggerFormat, setSwaggerFormat] = useState<'json' | 'yaml'>('json');
+  const [rawSwaggerContent, setRawSwaggerContent] = useState<string>('');
+  const [showRawContent, setShowRawContent] = useState<boolean>(false);
+
   // 加載Swagger文檔
   const loadSwaggerDoc = async (url: string) => {
     if (!url) {
@@ -52,6 +59,18 @@ const SwaggerUI: React.FC<SwaggerUIProps> = ({
       const response = await parseSwaggerDocument(url);
       if (response.success && response.data) {
         setSwaggerDoc(response.data);
+        
+        // 獲取原始內容並檢測格式
+        try {
+          const rawResponse = await fetch(`/api/proxy/raw?url=${encodeURIComponent(url)}`);
+          if (rawResponse.ok) {
+            const rawData = await rawResponse.text();
+            setRawSwaggerContent(rawData);
+            setSwaggerFormat(detectSwaggerFormat(rawData));
+          }
+        } catch (error) {
+          console.error('Failed to get raw Swagger content:', error);
+        }
         
         // 保存到最近使用的URL列表
         if (typeof window !== 'undefined') {
@@ -70,17 +89,43 @@ const SwaggerUI: React.FC<SwaggerUIProps> = ({
       setLoading(false);
     }
   };
-  
+
+  // 切換 Swagger 格式
+  const toggleSwaggerFormat = () => {
+    if (!swaggerDoc) return;
+    
+    const newFormat = swaggerFormat === 'json' ? 'yaml' : 'json';
+    setSwaggerFormat(newFormat);
+    
+    // 轉換格式
+    try {
+      const convertedContent = convertSwaggerFormat(swaggerDoc, newFormat);
+      setRawSwaggerContent(convertedContent);
+    } catch (error) {
+      console.error('Failed to convert Swagger format:', error);
+    }
+  };
+
+  // 顯示原始內容
+  const handleShowRawContent = () => {
+    setShowRawContent(true);
+  };
+
+  // 關閉原始內容對話框
+  const handleCloseRawContent = () => {
+    setShowRawContent(false);
+  };
+
   // 處理URL輸入變化
   const handleUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSwaggerUrl(e.target.value);
   };
-  
+
   // 處理加載按鈕點擊
   const handleLoadClick = () => {
     loadSwaggerDoc(swaggerUrl);
   };
-  
+
   // 處理路徑選擇
   const handlePathSelect = (path: string, method: string) => {
     // 如果选择了不同的路径或方法，添加淡出动画效果
@@ -127,17 +172,17 @@ const SwaggerUI: React.FC<SwaggerUIProps> = ({
       }
     }
   };
-  
+
   // 處理登入按鈕點擊
   const handleLoginClick = () => {
     setShowLoginForm(true);
   };
-  
+
   // 處理登出按鈕點擊
   const handleLogoutClick = () => {
     logout();
   };
-  
+
   // 關閉登入表單
   const handleCloseLoginForm = () => {
     setShowLoginForm(false);
@@ -147,31 +192,31 @@ const SwaggerUI: React.FC<SwaggerUIProps> = ({
   const handleBearerTokenClick = () => {
     setShowBearerTokenForm(true);
   };
-  
+
   // 關閉 Bearer Token 表單
   const handleCloseBearerTokenForm = () => {
     setShowBearerTokenForm(false);
   };
-  
+
   // 獲取最近使用的URLs
   const getRecentUrls = (): string[] => {
     if (typeof window === 'undefined') return [];
     return JSON.parse(localStorage.getItem('recentSwaggerUrls') || '[]');
   };
-  
+
   // 加載最近使用的URL
   const loadRecentUrl = (url: string) => {
     setSwaggerUrl(url);
     loadSwaggerDoc(url);
   };
-  
+
   // 在組件掛載時加載默認URL
   useEffect(() => {
     if (defaultSwaggerUrl) {
       loadSwaggerDoc(defaultSwaggerUrl);
     }
   }, [defaultSwaggerUrl]);
-  
+
   return (
     <div className={`container-responsive py-4 animate-fade-in ${className}`}>
       <div className="glass-morphism p-4 mb-3 flex flex-wrap items-center justify-between gap-3 card-hover">
@@ -193,58 +238,73 @@ const SwaggerUI: React.FC<SwaggerUIProps> = ({
           <div>
             <h1 className="text-xl font-bold gradient-text">
               {swaggerDoc?.info?.title || 'SwgER UI'}
+              {swaggerDoc && (
+                <span className="ml-2 text-sm font-normal bg-primary bg-opacity-20 px-2 py-0.5 rounded-full">
+                  <FontAwesomeIcon icon={faFileCode} className="mr-1" />
+                  {swaggerFormat.toUpperCase()}
+                </span>
+              )}
             </h1>
             <p className="text-sm text-gray-400">
               {swaggerDoc?.info?.description && swaggerDoc.info.description.substring(0, 100) || '一個美觀的Swagger UI替代品'}
               {swaggerDoc?.info?.description && swaggerDoc.info.description.length > 100 ? '...' : ''}
             </p>
           </div>
-          {swaggerDoc?.info?.version && (
-            <span className="ml-3 text-xs bg-gray-700 text-white px-2 py-1 rounded-full">
-              v{swaggerDoc.info.version}
-            </span>
-          )}
         </div>
         
-        <div className="flex items-center gap-2">
-          {authState.isAuthenticated ? (
-            <div className="flex items-center gap-2">
-              <div className="text-sm bg-gray-800 px-3 py-1 rounded-full">
-                <span className="font-medium text-blue-400">{authState.username}</span>
-              </div>
-              <Button
-                variant="danger"
-                size="sm"
-                icon={faSignOut}
-                onClick={handleLogoutClick}
-                className="btn-pulse"
+        <div className="flex flex-wrap items-center gap-2">
+          {swaggerDoc && (
+            <>
+              <Button 
+                size="sm" 
+                variant="secondary" 
+                onClick={toggleSwaggerFormat}
+                title={`切換到 ${swaggerFormat === 'json' ? 'YAML' : 'JSON'} 格式`}
               >
-                登出
+                <FontAwesomeIcon icon={faExchangeAlt} className="mr-1" />
+                切換到 {swaggerFormat === 'json' ? 'YAML' : 'JSON'}
               </Button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <Button
-                variant="primary"
-                size="sm"
-                icon={faSignIn}
-                onClick={handleLoginClick}
-                className="btn-pulse"
+              
+              <Button 
+                size="sm" 
+                variant="info" 
+                onClick={handleShowRawContent}
+                title="查看原始內容"
               >
-                登入
+                <FontAwesomeIcon icon={faEye} className="mr-1" />
+                查看原始內容
               </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                icon={faKey}
-                onClick={handleBearerTokenClick}
-                className="btn-pulse"
-                title="設置 Bearer Token"
-              >
-                Bearer Token
-              </Button>
-            </div>
+            </>
           )}
+          
+          {authState.isAuthenticated ? (
+            <Button 
+              size="sm" 
+              variant="danger" 
+              onClick={handleLogoutClick}
+            >
+              <FontAwesomeIcon icon={faSignOut} className="mr-1" />
+              登出
+            </Button>
+          ) : (
+            <Button 
+              size="sm" 
+              variant="primary" 
+              onClick={handleLoginClick}
+            >
+              <FontAwesomeIcon icon={faSignIn} className="mr-1" />
+              登入
+            </Button>
+          )}
+          
+          <Button 
+            size="sm" 
+            variant="secondary" 
+            onClick={handleBearerTokenClick}
+          >
+            <FontAwesomeIcon icon={faKey} className="mr-1" />
+            Bearer Token
+          </Button>
         </div>
       </div>
       
@@ -351,16 +411,50 @@ const SwaggerUI: React.FC<SwaggerUIProps> = ({
         </div>
       )}
       
+      {/* 原始內容對話框 */}
+      <Dialog open={showRawContent} onOpenChange={setShowRawContent}>
+        <DialogContent className="max-w-4xl">
+          <DialogTitle>Swagger 原始內容</DialogTitle>
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-medium">
+              格式: <span className="text-primary">{swaggerFormat.toUpperCase()}</span>
+            </h3>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={toggleSwaggerFormat}
+            >
+              <FontAwesomeIcon icon={faExchangeAlt} className="mr-1" />
+              切換到 {swaggerFormat === 'json' ? 'YAML' : 'JSON'}
+            </Button>
+          </div>
+          
+          <div className="bg-gray-900 p-4 rounded-md overflow-auto max-h-[60vh]">
+            <pre className="text-sm text-gray-300 whitespace-pre-wrap">
+              {rawSwaggerContent}
+            </pre>
+          </div>
+          
+          <div className="flex justify-end mt-4">
+            <Button variant="primary" onClick={handleCloseRawContent}>
+              關閉
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      
       {/* 登入表單對話框 */}
       <Dialog open={showLoginForm} onOpenChange={setShowLoginForm}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="max-w-md">
+          <DialogTitle>登入</DialogTitle>
           <LoginForm onClose={handleCloseLoginForm} />
         </DialogContent>
       </Dialog>
       
       {/* Bearer Token 表單對話框 */}
       <Dialog open={showBearerTokenForm} onOpenChange={setShowBearerTokenForm}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="max-w-md">
+          <DialogTitle>設置 Bearer Token</DialogTitle>
           <BearerTokenForm onClose={handleCloseBearerTokenForm} />
         </DialogContent>
       </Dialog>
