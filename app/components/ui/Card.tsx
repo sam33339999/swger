@@ -24,7 +24,7 @@ const Card: React.FC<CardProps> = ({
   footerClassName = '',
 }) => {
   // 基本樣式
-  const baseClasses = 'rounded-lg overflow-hidden';
+  const baseClasses = 'rounded-lg overflow-x-auto';
   
   // 變體樣式
   const variantClasses = {

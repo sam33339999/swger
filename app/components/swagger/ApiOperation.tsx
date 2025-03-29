@@ -87,6 +87,12 @@ const ApiOperationContent: React.FC<ApiOperationProps> = ({
     'Content-Type': 'application/json',
   });
   
+  // 初始化路徑參數
+  const [pathParams, setPathParams] = useState<Record<string, string>>({});
+  
+  // 初始化查詢參數
+  const [queryParams, setQueryParams] = useState<Record<string, string>>({});
+  
   // 初始化請求體 - 確保每次都從操作定義中獲取最新的示例
   const [requestBody, setRequestBody] = useState<string>(() => {
     if (operation?.requestBody) {
@@ -99,6 +105,8 @@ const ApiOperationContent: React.FC<ApiOperationProps> = ({
   const [loading, setLoading] = useState(false);
   const [headerKey, setHeaderKey] = useState('');
   const [headerValue, setHeaderValue] = useState('');
+  const [queryKey, setQueryKey] = useState('');
+  const [queryValue, setQueryValue] = useState('');
   
   // 當組件掛載時添加動畫效果
   useEffect(() => {
@@ -109,6 +117,28 @@ const ApiOperationContent: React.FC<ApiOperationProps> = ({
       setTimeout(() => {
         element.classList.remove('opacity-0');
       }, 50);
+    }
+    
+    // 初始化路徑參數
+    if (operation?.parameters) {
+      const pathParameters = operation.parameters.filter(param => param.in === 'path');
+      if (pathParameters.length > 0) {
+        const initialPathParams: Record<string, string> = {};
+        pathParameters.forEach(param => {
+          initialPathParams[param.name] = param.example?.toString() || '';
+        });
+        setPathParams(initialPathParams);
+      }
+      
+      // 初始化查詢參數
+      const queryParameters = operation.parameters.filter(param => param.in === 'query');
+      if (queryParameters.length > 0) {
+        const initialQueryParams: Record<string, string> = {};
+        queryParameters.forEach(param => {
+          initialQueryParams[param.name] = param.example?.toString() || '';
+        });
+        setQueryParams(initialQueryParams);
+      }
     }
     
     // 如果操作需要認證，自動添加Authorization頭
@@ -152,7 +182,22 @@ const ApiOperationContent: React.FC<ApiOperationProps> = ({
     
     setLoading(true);
     try {
-      const url = `${serverUrl}${path}`;
+      // 替換路徑中的參數
+      let finalPath = path;
+      Object.entries(pathParams).forEach(([key, value]) => {
+        finalPath = finalPath.replace(`{${key}}`, encodeURIComponent(value));
+      });
+      
+      // 添加查詢參數
+      const queryEntries = Object.entries(queryParams).filter(([, value]) => value !== '');
+      if (queryEntries.length > 0) {
+        const queryString = queryEntries
+          .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+          .join('&');
+        finalPath = `${finalPath}${finalPath.includes('?') ? '&' : '?'}${queryString}`;
+      }
+      
+      const url = `${serverUrl}${finalPath}`;
       let body;
       
       try {
@@ -188,6 +233,28 @@ const ApiOperationContent: React.FC<ApiOperationProps> = ({
     
     setHeaderKey('');
     setHeaderValue('');
+  };
+  
+  // 添加查詢參數
+  const handleAddQueryParam = () => {
+    if (!queryKey || !queryValue) return;
+    
+    setQueryParams(prev => ({
+      ...prev,
+      [queryKey]: queryValue,
+    }));
+    
+    setQueryKey('');
+    setQueryValue('');
+  };
+  
+  // 移除查詢參數
+  const handleRemoveQueryParam = (key: string) => {
+    setQueryParams(prev => {
+      const newParams = { ...prev };
+      delete newParams[key];
+      return newParams;
+    });
   };
   
   // 移除請求頭
@@ -386,6 +453,119 @@ const ApiOperationContent: React.FC<ApiOperationProps> = ({
               label: '測試',
               content: (
                 <div className="space-y-3">
+                  {/* 路徑參數 */}
+                  {operation.parameters && operation.parameters.filter(param => param.in === 'path').length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-medium mb-2">路徑參數</h4>
+                      <div className="space-y-2">
+                        {operation.parameters.filter(param => param.in === 'path').map((param, index) => (
+                          <div key={index} className="flex items-center">
+                            <label className="w-1/3 text-sm font-medium">
+                              {param.name}
+                              {param.required && <span className="text-red-500 ml-1">*</span>}
+                            </label>
+                            <Input
+                              value={pathParams[param.name] || ''}
+                              onChange={(e) => setPathParams(prev => ({
+                                ...prev,
+                                [param.name]: e.target.value
+                              }))}
+                              placeholder={param.description || param.name}
+                              className="w-2/3"
+                              variant="modern"
+                              name={`path-param-${param.name}`}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* 查詢參數 */}
+                  <div>
+                    <h4 className="text-sm font-medium mb-2">查詢參數</h4>
+                    
+                    {/* 已添加的查詢參數 */}
+                    <div className="space-y-2 mb-2">
+                      {Object.entries(queryParams).map(([key, value], index) => (
+                        <div key={index} className="flex items-center space-x-2">
+                          <div className="w-1/3">
+                            <Input
+                              disabled
+                              value={key}
+                              className="text-xs"
+                            />
+                          </div>
+                          <div className="flex-1">
+                            <Input
+                              value={value}
+                              onChange={e => setQueryParams(prev => ({
+                                ...prev,
+                                [key]: e.target.value
+                              }))}
+                              className="text-xs"
+                            />
+                          </div>
+                          <button
+                            onClick={() => handleRemoveQueryParam(key)}
+                            className="p-1 text-red-400 hover:text-red-300"
+                            title="移除參數"
+                          >
+                            <FontAwesomeIcon icon={faMinus} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    
+                    {/* 添加新查詢參數 */}
+                    <div className="flex items-center space-x-2">
+                      <div className="w-1/3">
+                        <Input
+                          value={queryKey}
+                          onChange={e => setQueryKey(e.target.value)}
+                          placeholder="參數名稱"
+                          className="text-xs"
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <Input
+                          value={queryValue}
+                          onChange={e => setQueryValue(e.target.value)}
+                          placeholder="參數值"
+                          className="text-xs"
+                        />
+                      </div>
+                      <button
+                        onClick={handleAddQueryParam}
+                        disabled={!queryKey || !queryValue}
+                        className={`p-1 ${!queryKey || !queryValue ? 'text-gray-500' : 'text-green-400 hover:text-green-300'}`}
+                        title="添加參數"
+                      >
+                        <FontAwesomeIcon icon={faPlus} />
+                      </button>
+                    </div>
+                    
+                    {/* API定義的查詢參數 */}
+                    {operation.parameters && operation.parameters.filter(param => param.in === 'query').length > 0 && (
+                      <div className="mt-2">
+                        <h6 className="text-xs font-medium mb-1 text-gray-500">API定義的查詢參數:</h6>
+                        <div className="space-y-1">
+                          {operation.parameters.filter(param => param.in === 'query').map((param, index) => (
+                            <div key={index} className="flex items-center text-xs">
+                              <span className="font-mono text-blue-400 mr-2">{param.name}</span>
+                              {param.description && (
+                                <span className="text-gray-400">{param.description}</span>
+                              )}
+                              {param.required && (
+                                <span className="text-red-500 ml-1">*</span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  
                   {/* 請求頭 */}
                   <div>
                     <h4 className="text-sm font-medium mb-2">請求頭</h4>

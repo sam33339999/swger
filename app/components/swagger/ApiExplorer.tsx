@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState, useEffect } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
@@ -7,13 +9,14 @@ import {
   faTag,
   faGlobe,
   faInfoCircle,
-  faLock,
-  faShieldAlt
+  faShieldAlt,
+  faCopy
 } from '@fortawesome/free-solid-svg-icons';
 import { SwaggerDocument, SwaggerPathItem, SwaggerOperation } from '../../types';
 import { getTags, groupPathsByTag } from '../../utils/swagger';
 import Input from '../ui/Input';
 import Card from '../ui/Card';
+import { useNotification } from '../ui/Notification';
 
 interface ApiExplorerProps {
   swagger: SwaggerDocument;
@@ -34,6 +37,18 @@ const requiresSecurity = (swagger: SwaggerDocument, path: string, method: string
   return !!operation.security && operation.security.length > 0;
 };
 
+// 獲取操作的描述
+const getOperationSummary = (swagger: SwaggerDocument, path: string, method: string): string | undefined => {
+  const pathObj = swagger.paths?.[path];
+  if (!pathObj) return undefined;
+  
+  const methodLower = method.toLowerCase();
+  const operation = pathObj[methodLower as keyof SwaggerPathItem] as SwaggerOperation | undefined;
+  if (!operation) return undefined;
+  
+  return operation.summary || operation.description;
+};
+
 const ApiExplorer: React.FC<ApiExplorerProps> = ({ 
   swagger, 
   onSelectPath,
@@ -42,6 +57,7 @@ const ApiExplorer: React.FC<ApiExplorerProps> = ({
   const [expandedTags, setExpandedTags] = useState<Record<string, boolean>>({});
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredGroups, setFilteredGroups] = useState<Record<string, Array<{path: string; methods: string[]}>>>({});
+  const { showNotification } = useNotification();
   
   // 初始化展開所有標籤
   useEffect(() => {
@@ -105,6 +121,25 @@ const ApiExplorer: React.FC<ApiExplorerProps> = ({
     }
   };
   
+  // 複製URL到剪貼板
+  const handleCopyUrl = (url: string) => {
+    navigator.clipboard.writeText(url)
+      .then(() => {
+        showNotification({
+          type: 'success',
+          message: '已複製URL到剪貼板',
+          duration: 2000
+        });
+      })
+      .catch(() => {
+        showNotification({
+          type: 'error',
+          message: '複製失敗',
+          duration: 2000
+        });
+      });
+  };
+  
   return (
     <Card 
       variant="glass" 
@@ -133,14 +168,14 @@ const ApiExplorer: React.FC<ApiExplorerProps> = ({
         />
       </div>
       
-      <div className="overflow-y-auto scrollbar-thin" style={{ maxHeight: '600px' }}>
+      <div className="overflow-y-auto scrollbar-thin" style={{ maxHeight: '800px' }}>
         {Object.keys(filteredGroups).length === 0 ? (
           <div className="text-center py-4 text-gray-500">
             沒有找到符合條件的 API
           </div>
         ) : (
           Object.entries(filteredGroups).map(([tag, paths]) => (
-            <div key={tag} className="mb-2">
+            <div key={tag} className="mb-2 overflow-x-auto">
               <div 
                 className="flex items-center p-2 bg-gray-800/50 rounded cursor-pointer hover:bg-gray-700/50"
                 onClick={() => toggleTag(tag)}
@@ -157,49 +192,52 @@ const ApiExplorer: React.FC<ApiExplorerProps> = ({
               </div>
               
               {expandedTags[tag] && (
-                <div className="ml-6 mt-1 space-y-1">
+                <div className="ml-6 mt-1 space-y-1 overflow-auto">
                   {paths.map(({ path, methods }) => (
                     <div key={path} className="rounded hover:bg-gray-700/50 transition-colors">
-                      <div className="p-2 flex flex-wrap items-center gap-2">
+                      <div className="p-2 flex-col flex-wrap items-center gap-2">
                         <div className="flex flex-wrap gap-1 mr-2">
                           {methods.map(method => {
-                            const needsSecurity = requiresSecurity(swagger, path, method);
+                            const summary = getOperationSummary(swagger, path, method);
                             return (
                               <span 
                                 key={`${path}-${method}`}
-                                className={`${getMethodColor(method)} text-white text-xs px-2 py-0.5 rounded cursor-pointer relative group`}
                                 onClick={() => onSelectPath(path, method)}
                               >
-                                {method}
-                                {needsSecurity && (
-                                  <span className="ml-1 inline-flex items-center">
-                                    <FontAwesomeIcon 
-                                      icon={faLock} 
-                                      className="text-xs" 
-                                      title="需要認證"
-                                    />
-                                    <span className="absolute bottom-full left-1/2 transform -translate-x-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10">
-                                      需要認證
-                                    </span>
+                                <span className={`${getMethodColor(method)} text-white text-xs px-2 py-0.5 rounded cursor-pointer relative group`}>{method}</span>
+                                {summary && (
+                                  <span className="overflow-x-hidden text-nowrap">
+                                    <span className="ml-2 text-xs text-gray-200 ">{summary}</span>
                                   </span>
                                 )}
                               </span>
                             );
                           })}
                         </div>
-                        <span 
-                          className="text-sm truncate cursor-pointer hover:underline flex-1 flex items-center"
-                          onClick={() => methods.length > 0 && onSelectPath(path, methods[0])}
-                        >
-                          {path}
-                          {methods.some(method => requiresSecurity(swagger, path, method)) && (
-                            <FontAwesomeIcon 
-                              icon={faShieldAlt} 
-                              className="ml-2 text-amber-400 text-xs" 
-                              title="此路徑包含需要認證的操作"
-                            />
-                          )}
-                        </span>
+                        <div className="flex-1 overflow-x-auto scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-transparent mt-1">
+                          <div className="flex items-center whitespace-nowrap">
+                            <button 
+                              onClick={() => handleCopyUrl(path)}
+                              className="mr-2 text-gray-400 hover:text-primary transition-colors"
+                              title="複製URL"
+                            >
+                              <FontAwesomeIcon icon={faCopy} />
+                            </button>
+                            <span 
+                              className="text-sm cursor-pointer hover:underline flex items-center"
+                              onClick={() => methods.length > 0 && onSelectPath(path, methods[0])}
+                            >
+                              {path}
+                              {methods.some(method => requiresSecurity(swagger, path, method)) && (
+                                <FontAwesomeIcon 
+                                  icon={faShieldAlt} 
+                                  className="ml-2 text-amber-400 text-xs" 
+                                  title="此路徑包含需要認證的操作"
+                                />
+                              )}
+                            </span>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   ))}
