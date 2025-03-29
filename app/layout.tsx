@@ -32,6 +32,7 @@ export default function RootLayout({
     <html lang="zh-TW" className="trancy-zh-Hant">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        suppressHydrationWarning={true}
       >
         <NotificationProvider>
           {children}
