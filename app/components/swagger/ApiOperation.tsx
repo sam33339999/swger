@@ -3,9 +3,12 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
   faPaperPlane, 
   faInfoCircle, 
-  faMinus,
-  faPlus,
-  faExclamationTriangle,
+  faCode, 
+  faExclamationTriangle, 
+  faPlus, 
+  faMinus, 
+  faTable,
+  faTree,
   faLock,
   faShieldAlt
 } from '@fortawesome/free-solid-svg-icons';
@@ -18,7 +21,7 @@ import Tabs from '../ui/Tabs';
 import Card from '../ui/Card';
 import CodeBlock from '../ui/CodeBlock';
 
-// 安全地处理未知类型数据的辅助函数
+// 安全地處理未知類型數據的輔助函數
 const formatUnknownData = (data: unknown): string => {
   if (typeof data === 'string') {
     return data;
@@ -35,7 +38,7 @@ const formatUnknownData = (data: unknown): string => {
   }
 };
 
-// 检查数据是否为HTML字符串
+// 檢查數據是否為 HTML 字符串
 const isHtmlString = (data: unknown): boolean => {
   return typeof data === 'string' && data.trim().startsWith('<!DOCTYPE html');
 };
@@ -55,7 +58,7 @@ const ApiOperation: React.FC<ApiOperationProps> = ({
   className = '',
   serverHost = '',
 }) => {
-  // 使用key強制組件在path或method變化時完全重新渲染
+  // 使用 key 強制組件在 path 或 method 變化時完全重新渲染
   const componentKey = `${method}-${path}`;
   
   return (
@@ -70,7 +73,7 @@ const ApiOperation: React.FC<ApiOperationProps> = ({
   );
 };
 
-// 將內容部分拆分為單獨的組件，確保在key變化時完全重新創建
+// 將內容部分拆分為單獨的組件，確保在 key 變化時完全重新創建
 const ApiOperationContent: React.FC<ApiOperationProps> = ({
   swagger,
   path,
@@ -84,7 +87,7 @@ const ApiOperationContent: React.FC<ApiOperationProps> = ({
   // 使用自定義 serverHost 或 Swagger 文檔中的 server URL
   const effectiveServerUrl = serverHost || defaultServerUrl;
   
-  // 生成唯一的操作ID
+  // 生成唯一的操作 ID
   const operationId = useMemo(() => {
     return `${method.toUpperCase()}-${path}`;
   }, [method, path]);
@@ -148,14 +151,14 @@ const ApiOperationContent: React.FC<ApiOperationProps> = ({
       }
     }
     
-    // 如果操作需要認證，自動添加Authorization頭
+    // 如果操作需要認證，自動添加 Authorization 頭
     if (operation?.security && operation.security.length > 0) {
       const hasAuthHeader = Object.keys(requestHeaders).some(
         key => key.toLowerCase() === 'authorization'
       );
       
       if (!hasAuthHeader) {
-        // 從localStorage獲取token
+        // 從 localStorage 獲取 token
         const authState = typeof window !== 'undefined' 
           ? JSON.parse(localStorage.getItem('auth-state') || '{}')
           : {};
@@ -183,7 +186,7 @@ const ApiOperationContent: React.FC<ApiOperationProps> = ({
     setResponse(null);
   }, [operationId, operation]);
   
-  // 發送API請求
+  // 發送 API 請求
   const handleSendRequest = async () => {
     if (!operation) return;
     
@@ -354,7 +357,7 @@ const ApiOperationContent: React.FC<ApiOperationProps> = ({
                         </ul>
                         <div className="mt-2 text-xs text-gray-400">
                           <FontAwesomeIcon icon={faInfoCircle} className="mr-1" />
-                          需要認證才能訪問此API。請在測試頁面設置適當的認證信息。
+                          需要認證才能訪問此 API。請在測試頁面設置適當的認證信息。
                         </div>
                       </div>
                     </div>
@@ -404,10 +407,9 @@ const ApiOperationContent: React.FC<ApiOperationProps> = ({
                               <div key={contentType} className="mt-2">
                                 <p className="text-xs font-mono mb-1">{contentType}</p>
                                 {content.schema && (
-                                  <CodeBlock
-                                    code={formatUnknownData(getRequestExample(operation) || {})}
+                                  <JsonViewer
+                                    data={formatUnknownData(getRequestExample(operation) || {})}
                                     language="json"
-                                    
                                   />
                                 )}
                               </div>
@@ -439,10 +441,9 @@ const ApiOperationContent: React.FC<ApiOperationProps> = ({
                               <div key={contentType} className="mt-2 p-4">
                                 <p className="text-xs font-mono mb-1">{contentType}</p>
                                 {content.schema && (
-                                  <CodeBlock
-                                    code={formatUnknownData(content.schema)}
+                                  <JsonViewer
+                                    data={formatUnknownData(content.schema)}
                                     language="json"
-                                    
                                   />
                                 )}
                               </div>
@@ -552,10 +553,10 @@ const ApiOperationContent: React.FC<ApiOperationProps> = ({
                       </button>
                     </div>
                     
-                    {/* API定義的查詢參數 */}
+                    {/* API 定義的查詢參數 */}
                     {operation.parameters && operation.parameters.filter(param => param.in === 'query').length > 0 && (
                       <div className="mt-2">
-                        <h6 className="text-xs font-medium mb-1 text-gray-500">API定義的查詢參數:</h6>
+                        <h6 className="text-xs font-medium mb-1 text-gray-500">API 定義的查詢參數:</h6>
                         <div className="space-y-1">
                           {operation.parameters.filter(param => param.in === 'query').map((param, index) => (
                             <div key={index} className="flex items-center text-xs">
@@ -663,8 +664,8 @@ const ApiOperationContent: React.FC<ApiOperationProps> = ({
                             <>
                               {isHtmlString(response.data) ? (
                                 <div className="space-y-3">
-                                  <CodeBlock
-                                    code={formatUnknownData(response.data)}
+                                  <JsonViewer
+                                    data={formatUnknownData(response.data)}
                                     language="html"
                                   />
                                   <div className="mt-4">
@@ -679,8 +680,8 @@ const ApiOperationContent: React.FC<ApiOperationProps> = ({
                                   </div>
                                 </div>
                               ) : (
-                                <CodeBlock
-                                  code={formatUnknownData(response.data)}
+                                <JsonViewer
+                                  data={formatUnknownData(response.data)}
                                   language={typeof response.data === 'string' && response.data.trim().startsWith('<') ? 'html' : 'json'}
                                   maxHeight="300px"
                                 />
@@ -705,8 +706,8 @@ const ApiOperationContent: React.FC<ApiOperationProps> = ({
                           {response.data !== undefined && response.data !== null ? (
                             <div className="mt-3">
                               <h5 className="text-sm font-medium mb-2 text-red-300">錯誤詳情</h5>
-                              <CodeBlock
-                                code={formatUnknownData(response.data)}
+                              <JsonViewer
+                                data={formatUnknownData(response.data)}
                                 language={typeof response.data === 'string' && response.data.trim().startsWith('<') ? 'html' : 'json'}
                                 maxHeight="300px"
                               />
@@ -731,8 +732,8 @@ const ApiOperationContent: React.FC<ApiOperationProps> = ({
                         id: 'curl',
                         label: 'cURL',
                         content: (
-                          <CodeBlock
-                            code={`curl -X ${method.toUpperCase()} "${effectiveServerUrl}${path}" \\
+                          <JsonViewer
+                            data={`curl -X ${method.toUpperCase()} "${effectiveServerUrl}${path}" \\
 ${Object.entries(requestHeaders).map(([key, value]) => `  -H "${key}: ${value}" \\`).join('\n')}${requestBody ? `\n  -d '${requestBody}'` : ''}`}
                             language="bash"
                           />
@@ -742,8 +743,8 @@ ${Object.entries(requestHeaders).map(([key, value]) => `  -H "${key}: ${value}" 
                         id: 'js',
                         label: 'JavaScript',
                         content: (
-                          <CodeBlock
-                            code={`// 使用 Fetch API
+                          <JsonViewer
+                            data={`// 使用 Fetch API
 const url = "${effectiveServerUrl}${path}";
 const options = {
   method: "${method.toUpperCase()}",
@@ -762,8 +763,8 @@ fetch(url, options)
                         id: 'php',
                         label: 'PHP',
                         content: (
-                          <CodeBlock
-                            code={`<?php
+                          <JsonViewer
+                            data={`<?php
 $url = "${effectiveServerUrl}${path}";
 $curl = curl_init($url);
 curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
@@ -793,8 +794,8 @@ if ($err) {
                         id: 'python',
                         label: 'Python',
                         content: (
-                          <CodeBlock
-                            code={`import requests
+                          <JsonViewer
+                            data={`import requests
 
 url = "${effectiveServerUrl}${path}"
 headers = ${JSON.stringify(requestHeaders, null, 2)}
@@ -819,6 +820,247 @@ print(response.json())`}
           ]}
         />
       </Card>
+    </div>
+  );
+};
+
+// JSON 視圖模式類型定義
+type JsonViewMode = 'raw' | 'tree' | 'table';
+
+// 自定義 JSON 樹視圖組件
+const JsonTreeView = ({ data }: { data: unknown }) => {
+  const renderValue = (value: unknown, depth = 0, key?: string, isLast = true): React.ReactNode => {
+    const indent = '  '.repeat(depth);
+    
+    if (value === null) {
+      return (
+        <div>
+          {key !== undefined && (
+            <span className="text-purple-400">{`"${key}"`}: </span>
+          )}
+          <span className="text-blue-400">null</span>
+          {!isLast && <span>,</span>}
+        </div>
+      );
+    }
+    
+    if (typeof value === 'undefined') {
+      return (
+        <div>
+          {key !== undefined && (
+            <span className="text-purple-400">{`"${key}"`}: </span>
+          )}
+          <span className="text-gray-400">undefined</span>
+          {!isLast && <span>,</span>}
+        </div>
+      );
+    }
+    
+    if (typeof value === 'string') {
+      return (
+        <div>
+          {key !== undefined && (
+            <span className="text-purple-400">{`"${key}"`}: </span>
+          )}
+          <span className="text-green-400">{`"${value}"`}</span>
+          {!isLast && <span>,</span>}
+        </div>
+      );
+    }
+    
+    if (typeof value === 'number' || typeof value === 'boolean') {
+      return (
+        <div>
+          {key !== undefined && (
+            <span className="text-purple-400">{`"${key}"`}: </span>
+          )}
+          <span className="text-amber-400">{String(value)}</span>
+          {!isLast && <span>,</span>}
+        </div>
+      );
+    }
+    
+    if (Array.isArray(value)) {
+      return (
+        <div>
+          {key !== undefined && (
+            <span className="text-purple-400">{`"${key}"`}: </span>
+          )}
+          <span>[</span>
+          <div className="pl-4">
+            {value.map((item, index) => 
+              renderValue(item, depth + 1, undefined, index === value.length - 1)
+            )}
+          </div>
+          <div>
+            {indent}]{!isLast && <span>,</span>}
+          </div>
+        </div>
+      );
+    }
+    
+    if (typeof value === 'object') {
+      const entries = Object.entries(value as Record<string, unknown>);
+      return (
+        <div>
+          {key !== undefined && (
+            <span className="text-purple-400">{`"${key}"`}: </span>
+          )}
+          <span>{'{'}</span>
+          <div className="pl-4">
+            {entries.map(([k, v], index) => 
+              renderValue(v, depth + 1, k, index === entries.length - 1)
+            )}
+          </div>
+          <div>
+            {indent}{'}'}{!isLast && <span>,</span>}
+          </div>
+        </div>
+      );
+    }
+    
+    return null;
+  };
+  
+  return (
+    <div className="font-mono text-sm overflow-auto bg-gray-900 p-4 rounded-md">
+      {renderValue(data)}
+    </div>
+  );
+};
+
+// 自定義 JSON 表格視圖組件
+const JsonTableView = ({ data }: { data: unknown }) => {
+  const renderTable = (obj: unknown, parentKey = ''): React.ReactNode => {
+    if (!obj || typeof obj !== 'object') {
+      return (
+        <tr key={parentKey}>
+          <td className="border border-gray-700 px-4 py-2">{parentKey}</td>
+          <td className="border border-gray-700 px-4 py-2">
+            {obj === null ? (
+              <span className="text-blue-400">null</span>
+            ) : typeof obj === 'string' ? (
+              <span className="text-green-400">{`"${obj}"`}</span>
+            ) : (
+              <span className="text-amber-400">{String(obj)}</span>
+            )}
+          </td>
+        </tr>
+      );
+    }
+    
+    if (Array.isArray(obj)) {
+      return obj.map((item, index) => {
+        const newKey = parentKey ? `${parentKey}[${index}]` : `[${index}]`;
+        return renderTable(item, newKey);
+      });
+    }
+    
+    return Object.entries(obj as Record<string, unknown>).map(([key, value]) => {
+      const newKey = parentKey ? `${parentKey}.${key}` : key;
+      
+      if (value === null || typeof value !== 'object') {
+        return (
+          <tr key={newKey}>
+            <td className="border border-gray-700 px-4 py-2">{newKey}</td>
+            <td className="border border-gray-700 px-4 py-2">
+              {value === null ? (
+                <span className="text-blue-400">null</span>
+              ) : typeof value === 'string' ? (
+                <span className="text-green-400">{`"${value}"`}</span>
+              ) : (
+                <span className="text-amber-400">{String(value)}</span>
+              )}
+            </td>
+          </tr>
+        );
+      }
+      
+      return renderTable(value, newKey);
+    });
+  };
+  
+  return (
+    <div className="overflow-auto">
+      <table className="w-full border-collapse border border-gray-700">
+        <thead>
+          <tr>
+            <th className="border border-gray-700 px-4 py-2 bg-gray-800">鍵</th>
+            <th className="border border-gray-700 px-4 py-2 bg-gray-800">值</th>
+          </tr>
+        </thead>
+        <tbody>
+          {renderTable(data)}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
+// JSON 視圖選擇器組件
+const JsonViewer = ({ data, language, maxHeight }: { data: unknown, language: string, maxHeight?: string }) => {
+  const [viewMode, setViewMode] = useState<JsonViewMode>('raw');
+  
+  // 如果不是 JSON 數據，直接使用原始 CodeBlock 顯示
+  if (language !== 'json') {
+    return (
+      <CodeBlock
+        code={typeof data === 'string' ? data : formatUnknownData(data)}
+        language={language}
+        maxHeight={maxHeight}
+      />
+    );
+  }
+  
+  // 解析 JSON 數據
+  let parsedData = data;
+  if (typeof data === 'string') {
+    try {
+      parsedData = JSON.parse(data);
+    } catch {
+      // 如果解析失敗，保持原始字符串
+      parsedData = data;
+    }
+  }
+  
+  return (
+    <div>
+      <div className="flex items-center justify-end mb-2 space-x-2">
+        <span className="text-xs text-gray-400 mr-2">選擇視圖模式：</span>
+        <button
+          onClick={() => setViewMode('raw')}
+          className={`p-1.5 rounded-md ${viewMode === 'raw' ? 'bg-blue-600' : 'bg-gray-700 hover:bg-gray-600'}`}
+          title="原始視圖"
+        >
+          <FontAwesomeIcon icon={faCode} className="h-3.5 w-3.5" />
+        </button>
+        <button
+          onClick={() => setViewMode('tree')}
+          className={`p-1.5 rounded-md ${viewMode === 'tree' ? 'bg-blue-600' : 'bg-gray-700 hover:bg-gray-600'}`}
+          title="樹狀視圖"
+        >
+          <FontAwesomeIcon icon={faTree} className="h-3.5 w-3.5" />
+        </button>
+        <button
+          onClick={() => setViewMode('table')}
+          className={`p-1.5 rounded-md ${viewMode === 'table' ? 'bg-blue-600' : 'bg-gray-700 hover:bg-gray-600'}`}
+          title="表格視圖"
+        >
+          <FontAwesomeIcon icon={faTable} className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      
+      {viewMode === 'raw' && (
+        <CodeBlock
+          code={typeof data === 'string' ? data : formatUnknownData(data)}
+          language={language}
+          maxHeight={maxHeight}
+        />
+      )}
+      
+      {viewMode === 'tree' && <JsonTreeView data={parsedData} />}
+      
+      {viewMode === 'table' && <JsonTableView data={parsedData} />}
     </div>
   );
 };
