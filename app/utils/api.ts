@@ -85,7 +85,8 @@ export const sendApiRequest = async (
   method: string,
   url: string,
   headers: Record<string, string> = {},
-  body?: unknown
+  body?: unknown,
+  files?: Record<string, File | File[]>
 ): Promise<ApiResponse<unknown>> => {
   try {
     // 獲取認證令牌
@@ -103,6 +104,37 @@ export const sendApiRequest = async (
       headers,
       data: body,
     };
+    
+    // 處理檔案上傳 (如果有檔案)
+    if (files && Object.keys(files).length > 0) {
+      // 創建 FormData 對象
+      const formData = new FormData();
+      
+      // 添加檔案
+      Object.entries(files).forEach(([key, value]) => {
+        if (Array.isArray(value)) {
+          // 處理多檔案上傳
+          value.forEach(file => formData.append(key, file));
+        } else {
+          // 處理單檔案上傳
+          formData.append(key, value);
+        }
+      });
+      
+      // 如果有其他數據，添加到 FormData
+      if (body && typeof body === 'object' && !(body instanceof FormData)) {
+        Object.entries(body as Record<string, any>).forEach(([key, value]) => {
+          formData.append(key, typeof value === 'object' ? JSON.stringify(value) : String(value));
+        });
+      }
+      
+      // 更新請求配置
+      config.data = formData;
+      config.headers = {
+        ...config.headers,
+        'Content-Type': 'multipart/form-data'
+      };
+    }
     
     // 發送請求
     const response = await axios(config);
