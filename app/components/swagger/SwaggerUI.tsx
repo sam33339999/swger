@@ -46,6 +46,7 @@ const SwaggerUI: React.FC<SwaggerUIProps> = ({
   const [swaggerFormat, setSwaggerFormat] = useState<'json' | 'yaml'>('json');
   const [rawSwaggerContent, setRawSwaggerContent] = useState<string>('');
   const [showRawContent, setShowRawContent] = useState<boolean>(false);
+  const [serverHost, setServerHost] = useState<string>('');
 
   // 加載Swagger文檔
   const loadSwaggerDoc = async (url: string) => {
@@ -119,6 +120,16 @@ const SwaggerUI: React.FC<SwaggerUIProps> = ({
   // 處理URL輸入變化
   const handleUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSwaggerUrl(e.target.value);
+  };
+
+  // 處理 Server Host 輸入變化
+  const handleServerHostChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newServerHost = e.target.value;
+    setServerHost(newServerHost);
+    // 保存到 localStorage
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('swger_server_host', newServerHost);
+    }
   };
 
   // 處理加載按鈕點擊
@@ -214,6 +225,14 @@ const SwaggerUI: React.FC<SwaggerUIProps> = ({
   useEffect(() => {
     if (defaultSwaggerUrl) {
       loadSwaggerDoc(defaultSwaggerUrl);
+    }
+    
+    // 從 localStorage 恢復 serverHost
+    if (typeof window !== 'undefined') {
+      const savedServerHost = localStorage.getItem('swger_server_host');
+      if (savedServerHost) {
+        setServerHost(savedServerHost);
+      }
     }
   }, [defaultSwaggerUrl]);
 
@@ -355,6 +374,18 @@ const SwaggerUI: React.FC<SwaggerUIProps> = ({
             </div>
           )}
         </div>
+
+        <div className="mt-2">
+          <label className="block text-sm font-medium text-gray-400 mb-1">Server Host (可選)</label>
+          <Input
+            placeholder="輸入 API Server Host，例如：https://api.example.com"
+            value={serverHost}
+            onChange={handleServerHostChange}
+            className="w-full"
+            variant="modern"
+          />
+          <p className="text-xs text-gray-500 mt-1">此設定將覆蓋 Swagger 文檔中的 server 設定，用於 API 請求的基礎 URL</p>
+        </div>
       </div>
       
       {swaggerDoc ? (
@@ -377,6 +408,7 @@ const SwaggerUI: React.FC<SwaggerUIProps> = ({
                   path={selectedPath}
                   method={selectedMethod}
                   className="animate-slide-up"
+                  serverHost={serverHost}
                 />
               </div>
             ) : (

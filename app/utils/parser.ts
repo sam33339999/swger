@@ -1,4 +1,4 @@
-import SwaggerParser from '@apidevtools/swagger-parser';
+// import SwaggerParser from '@apidevtools/swagger-parser';
 import { SwaggerDocument } from '../types';
 import jsYaml from 'js-yaml';
 
@@ -23,9 +23,10 @@ export const parseSwaggerContent = async (content: string): Promise<SwaggerDocum
       }
     }
     
-    // 使用SwaggerParser验证解析后的对象
-    const validatedDoc = await SwaggerParser.validate(parsedObject);
-    return validatedDoc as SwaggerDocument;
+    // 跳過驗證，直接返回解析後的對象
+    // 原來的驗證代碼: const validatedDoc = await SwaggerParser.validate(parsedObject);
+    // 現在直接返回解析後的對象，不進行驗證
+    return parsedObject as SwaggerDocument;
   } catch (error) {
     console.error('解析 Swagger 文件失敗:', error);
     throw new Error(error instanceof Error ? error.message : '解析 Swagger 文件失敗');

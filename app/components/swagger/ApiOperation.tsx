@@ -10,7 +10,7 @@ import {
   faShieldAlt
 } from '@fortawesome/free-solid-svg-icons';
 import { SwaggerDocument, ApiResponse } from '../../types';
-import { getOperation, getServerUrl, getRequestExample } from '../../utils/swagger';
+import { getOperation, getRequestExample, getServerUrl } from '../../utils/swagger';
 import { sendApiRequest } from '../../utils/api';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
@@ -45,6 +45,7 @@ interface ApiOperationProps {
   path: string;
   method: string;
   className?: string;
+  serverHost?: string;
 }
 
 const ApiOperation: React.FC<ApiOperationProps> = ({
@@ -52,6 +53,7 @@ const ApiOperation: React.FC<ApiOperationProps> = ({
   path,
   method,
   className = '',
+  serverHost = '',
 }) => {
   // 使用key強制組件在path或method變化時完全重新渲染
   const componentKey = `${method}-${path}`;
@@ -63,6 +65,7 @@ const ApiOperation: React.FC<ApiOperationProps> = ({
       path={path}
       method={method}
       className={className}
+      serverHost={serverHost}
     />
   );
 };
@@ -73,9 +76,13 @@ const ApiOperationContent: React.FC<ApiOperationProps> = ({
   path,
   method,
   className = '',
+  serverHost = '',
 }) => {
   const operation = getOperation(swagger, path, method);
-  const serverUrl = getServerUrl(swagger);
+  const defaultServerUrl = getServerUrl(swagger);
+  
+  // 使用自定義 serverHost 或 Swagger 文檔中的 server URL
+  const effectiveServerUrl = serverHost || defaultServerUrl;
   
   // 生成唯一的操作ID
   const operationId = useMemo(() => {
@@ -197,7 +204,7 @@ const ApiOperationContent: React.FC<ApiOperationProps> = ({
         finalPath = `${finalPath}${finalPath.includes('?') ? '&' : '?'}${queryString}`;
       }
       
-      const url = `${serverUrl}${finalPath}`;
+      const url = `${effectiveServerUrl}${finalPath}`;
       let body;
       
       try {
@@ -400,7 +407,7 @@ const ApiOperationContent: React.FC<ApiOperationProps> = ({
                                   <CodeBlock
                                     code={formatUnknownData(getRequestExample(operation) || {})}
                                     language="json"
-                                    maxHeight="200px"
+                                    
                                   />
                                 )}
                               </div>
@@ -435,7 +442,7 @@ const ApiOperationContent: React.FC<ApiOperationProps> = ({
                                   <CodeBlock
                                     code={formatUnknownData(content.schema)}
                                     language="json"
-                                    maxHeight="200px"
+                                    
                                   />
                                 )}
                               </div>
@@ -659,7 +666,6 @@ const ApiOperationContent: React.FC<ApiOperationProps> = ({
                                   <CodeBlock
                                     code={formatUnknownData(response.data)}
                                     language="html"
-                                    maxHeight="200px"
                                   />
                                   <div className="mt-4">
                                     <h5 className="text-sm font-medium mb-2">HTML 渲染結果</h5>
@@ -726,7 +732,7 @@ const ApiOperationContent: React.FC<ApiOperationProps> = ({
                         label: 'cURL',
                         content: (
                           <CodeBlock
-                            code={`curl -X ${method.toUpperCase()} "${serverUrl}${path}" \\
+                            code={`curl -X ${method.toUpperCase()} "${effectiveServerUrl}${path}" \\
 ${Object.entries(requestHeaders).map(([key, value]) => `  -H "${key}: ${value}" \\`).join('\n')}${requestBody ? `\n  -d '${requestBody}'` : ''}`}
                             language="bash"
                           />
@@ -738,7 +744,7 @@ ${Object.entries(requestHeaders).map(([key, value]) => `  -H "${key}: ${value}" 
                         content: (
                           <CodeBlock
                             code={`// 使用 Fetch API
-const url = "${serverUrl}${path}";
+const url = "${effectiveServerUrl}${path}";
 const options = {
   method: "${method.toUpperCase()}",
   headers: ${JSON.stringify(requestHeaders, null, 2)},${requestBody ? `\n  body: JSON.stringify(${requestBody}),` : ''}
@@ -758,7 +764,7 @@ fetch(url, options)
                         content: (
                           <CodeBlock
                             code={`<?php
-$url = "${serverUrl}${path}";
+$url = "${effectiveServerUrl}${path}";
 $curl = curl_init($url);
 curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
 curl_setopt($curl, CURLOPT_CUSTOMREQUEST, "${method.toUpperCase()}");
@@ -790,7 +796,7 @@ if ($err) {
                           <CodeBlock
                             code={`import requests
 
-url = "${serverUrl}${path}"
+url = "${effectiveServerUrl}${path}"
 headers = ${JSON.stringify(requestHeaders, null, 2)}
 ${requestBody ? `payload = ${requestBody}` : ''}
 
