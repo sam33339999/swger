@@ -89,6 +89,11 @@ export const sendApiRequest = async (
   files?: Record<string, File | File[]>
 ): Promise<ApiResponse<unknown>> => {
   try {
+    console.log('發送 API 請求:', { method, url });
+    console.log('請求頭:', headers);
+    console.log('請求體:', body);
+    console.log('檔案:', files);
+    
     // 獲取認證令牌
     const token = getAuthToken();
     
@@ -107,33 +112,52 @@ export const sendApiRequest = async (
     
     // 處理檔案上傳 (如果有檔案)
     if (files && Object.keys(files).length > 0) {
+      console.log('處理檔案上傳...');
+      
       // 創建 FormData 對象
       const formData = new FormData();
       
       // 添加檔案
+      let fileAdded = false;
       Object.entries(files).forEach(([key, value]) => {
-        if (Array.isArray(value)) {
-          // 處理多檔案上傳
-          value.forEach(file => formData.append(key, file));
-        } else {
-          // 處理單檔案上傳
-          formData.append(key, value);
+        if (value) {
+          if (Array.isArray(value)) {
+            // 處理多檔案上傳
+            value.forEach(file => {
+              console.log(`添加多檔案 ${key}:`, file.name);
+              formData.append(key, file);
+              fileAdded = true;
+            });
+          } else {
+            // 處理單檔案上傳
+            console.log(`添加單檔案 ${key}:`, value.name);
+            formData.append(key, value);
+            fileAdded = true;
+          }
         }
       });
       
       // 如果有其他數據，添加到 FormData
       if (body && typeof body === 'object' && !(body instanceof FormData)) {
-        Object.entries(body as Record<string, any>).forEach(([key, value]) => {
-          formData.append(key, typeof value === 'object' ? JSON.stringify(value) : String(value));
+        console.log('添加額外的表單數據:', body);
+        Object.entries(body as Record<string, unknown>).forEach(([key, value]) => {
+          if (value !== undefined && value !== null) {
+            formData.append(key, typeof value === 'object' ? JSON.stringify(value) : String(value));
+          }
         });
       }
       
-      // 更新請求配置
-      config.data = formData;
-      config.headers = {
-        ...config.headers,
-        'Content-Type': 'multipart/form-data'
-      };
+      // 如果確實有添加檔案，則使用 FormData
+      if (fileAdded) {
+        // 重要: 刪除 Content-Type 頭部，讓瀏覽器自動設置 multipart boundary
+        delete headers['Content-Type'];
+        
+        // 更新請求配置
+        config.data = formData;
+        console.log('FormData 已設置為請求體');
+      } else {
+        console.log('沒有檔案被添加，使用普通請求體');
+      }
     }
     
     // 發送請求

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
   faPaperPlane, 
@@ -24,8 +24,7 @@ import Input from '../ui/Input';
 import Tabs from '../ui/Tabs';
 import Card from '../ui/Card';
 import CodeBlock from '../ui/CodeBlock';
-
-
+import Spinner from '../ui/Spinner';
 
 // 安全地處理未知類型數據的輔助函數
 const formatUnknownData = (data: unknown): string => {
@@ -55,6 +54,14 @@ interface ApiOperationProps {
   method: string;
   className?: string;
   serverHost?: string;
+}
+
+interface FormDataParameter {
+  in: string; // 允許 'formData' 值
+  type?: string; // 允許 'file' 值
+  name: string;
+  required?: boolean;
+  description?: string;
 }
 
 const ApiOperation: React.FC<ApiOperationProps> = ({
@@ -127,9 +134,43 @@ const ApiOperationContent: React.FC<ApiOperationProps> = ({
   // 檔案上傳相關狀態
   const [isFileUpload, setIsFileUpload] = useState(false);
   const [fileUploadFields, setFileUploadFields] = useState<Array<{name: string, required: boolean}>>([]);
-  const [files, setFiles] = useState<Record<string, File | null>>({});
-  const fileInputRefs = useRef<Record<string, React.RefObject<HTMLInputElement>>>({});
+  const [files, setFiles] = useState<Record<string, File | File[] | null>>({});
+  const fileInputRefs = useRef<Record<string, React.RefObject<HTMLInputElement | null>>>({});
   
+  // 用於跟踪檔案上傳處理狀態的日誌
+  const [, setUploadLog] = useState<string[]>([]);
+  
+  // 添加上傳日誌
+  const addUploadLog = (message: string) => {
+    setUploadLog(prev => [...prev, `${new Date().toISOString().split('T')[1].split('.')[0]} - ${message}`]);
+    console.log(`[Upload Log] ${message}`);
+  };
+
+  const isMultipleFileField = useCallback((fieldName: string) => {
+    if (!operation) return false;
+    
+    // 檢查 OpenAPI 3.0 格式
+    if (operation.requestBody?.content?.['multipart/form-data']?.schema?.properties) {
+      const prop = operation.requestBody.content['multipart/form-data'].schema.properties[fieldName];
+      return prop?.type === 'array' && 
+             (prop.items?.type === 'string' && 
+              (prop.items?.format === 'binary' || prop.items?.format === 'base64' || prop.items?.format === 'byte'));
+    }
+    
+    // 檢查 Swagger 2.0 格式
+    const param = operation.parameters?.find(p => {
+      const formDataParam = p as unknown as FormDataParameter;
+      return formDataParam.in === 'formData' && formDataParam.name === fieldName;
+    });
+    
+    if (param) {
+      const formDataParam = param as unknown as FormDataParameter;
+      return formDataParam.type === 'array';
+    }
+    
+    return false;
+  }, [operation]);
+
   // 當組件掛載時添加動畫效果
   useEffect(() => {
     const element = document.getElementById(`api-operation-${operationId}`);
@@ -188,26 +229,37 @@ const ApiOperationContent: React.FC<ApiOperationProps> = ({
   // 重置請求體和響應
   useEffect(() => {
     // 檢查是否為檔案上傳操作
-    const fileUpload = isFileUploadOperation(operation);
+    const fileUpload = operation ? isFileUploadOperation(operation) : false;
     setIsFileUpload(fileUpload);
     
-    // 如果是檔案上傳，獲取檔案欄位
+    // 清除上傳日誌
+    setUploadLog([]);
+    
+    // 記錄操作信息
     if (fileUpload) {
+      addUploadLog(`檢測到檔案上傳操作: ${path} (${method})`);
+    }
+    
+    // 如果是檔案上傳，獲取檔案欄位
+    if (fileUpload && operation) {
       const fields = getFileUploadFields(operation);
       setFileUploadFields(fields);
+      addUploadLog(`檔案上傳欄位: ${fields.map(f => f.name).join(', ')}`);
       
       // 初始化檔案狀態
       const initialFiles = fields.reduce((acc, field) => {
         acc[field.name] = null;
         return acc;
-      }, {} as Record<string, File | null>);
+      }, {} as Record<string, File | File[] | null>);
       setFiles(initialFiles);
       
-      // 設置正確的 Content-Type
-      setRequestHeaders(prev => ({
-        ...prev,
-        'Content-Type': 'multipart/form-data',
-      }));
+      // 為檔案上傳，我們先移除 Content-Type 頭部，讓瀏覽器自動設置
+      setRequestHeaders(prev => {
+        const newHeaders = { ...prev };
+        // 對於檔案上傳，刪除 Content-Type，讓瀏覽器設置帶有 boundary 的值
+        delete newHeaders['Content-Type'];
+        return newHeaders;
+      });
     } else {
       // 重置檔案狀態
       setFiles({});
@@ -217,13 +269,16 @@ const ApiOperationContent: React.FC<ApiOperationProps> = ({
     // 重新初始化請求體
     if (operation?.requestBody && !fileUpload) {
       setRequestBody(formatUnknownData(getRequestExample(operation) || {}));
+    } else if (operation?.requestBody && fileUpload) {
+      // 對於檔案上傳操作，初始化一個簡單的請求體
+      setRequestBody('{"description": "檔案上傳"}');
     } else {
       setRequestBody('');
     }
     
     // 重置響應
     setResponse(null);
-  }, [operationId, operation]);
+  }, [operationId, operation, method, path]);
   
   // 發送 API 請求
   const handleSendRequest = async () => {
@@ -248,7 +303,12 @@ const ApiOperationContent: React.FC<ApiOperationProps> = ({
       
       const url = `${effectiveServerUrl}${finalPath}`;
       let body;
-      let validFiles: Record<string, File | File[]> | undefined;
+      let validFiles: Record<string, File | File[] | null> = {};
+      
+      console.log('API Operation:', operation);
+      console.log('isFileUpload:', isFileUpload); 
+      console.log('fileUploadFields:', fileUploadFields);
+      console.log('files:', files);
       
       if (isFileUpload) {
         // 處理檔案上傳
@@ -258,6 +318,7 @@ const ApiOperationContent: React.FC<ApiOperationProps> = ({
         Object.entries(files).forEach(([key, file]) => {
           if (file) {
             validFiles![key] = file;
+            console.log(`Valid file for ${key}:`, file);
           }
         });
         
@@ -269,31 +330,62 @@ const ApiOperationContent: React.FC<ApiOperationProps> = ({
           body = undefined;
         }
         
-        // 創建FormData對象
+        // 創建符合 sendApiRequest 參數類型的對象
+        const filteredFiles: Record<string, File | File[]> = {};
+        Object.entries(validFiles).forEach(([key, value]) => {
+          if (value !== null) {
+            filteredFiles[key] = value;
+          }
+        });
+        
+        // 創建 FormData 對象
         const formData = new FormData();
-        if (validFiles) {
-          Object.entries(validFiles).forEach(([key, file]) => {
-            // 处理单个文件或文件数组的上传
-            if (Array.isArray(file)) {
-              file.forEach((f) => formData.append(key, f));
-            } else {
-              formData.append(key, file);
+        
+        // 檢查是否有有效的檔案
+        // let hasValidFiles = false;
+        
+        if (filteredFiles) {
+          Object.entries(filteredFiles).forEach(([key, file]) => {
+            // 處理單個檔案或檔案數組的上傳
+            if (file) {
+              // hasValidFiles = true;
+              if (Array.isArray(file)) {
+                // 多檔上傳
+                file.forEach((f) => {
+                  console.log(`Appending multiple file ${key}:`, f.name);
+                  formData.append(key, f);
+                });
+              } else {
+                // 單檔上傳
+                console.log(`Appending single file ${key}:`, file.name);
+                formData.append(key, file);
+              }
             }
           });
         }
+        
+        // 即使沒有檔案，也會繼續處理其他表單數據
         if (body) {
           Object.entries(body).forEach(([key, value]) => {
-            formData.append(key, String(value));
+            if (value !== undefined && value !== null) {
+              console.log(`Appending form field ${key}:`, value);
+              formData.append(key, String(value));
+            }
           });
         }
         
-        // 設置正確的Content-Type
-        const headers = {
-          ...requestHeaders,
-          'Content-Type': 'multipart/form-data'
-        };
+        // 使用修改後的請求頭，確保不包含 Content-Type，讓瀏覽器自動設置
+        const headers = { ...requestHeaders };
         
-        const result = await sendApiRequest(method, url, headers, formData);
+        // 刪除可能導致問題的請求頭
+        delete headers['Content-Type']; // 讓瀏覽器自動設置 boundary
+        
+        console.log('Sending FormData request to:', url);
+        console.log('Headers:', headers);
+        
+        // 直接使用 FormData 作為請求體
+        const result = await sendApiRequest(method, url, headers, formData, filteredFiles);
+        console.log('File upload response:', result);
         setResponse(result);
         return;
       } else {
@@ -558,47 +650,75 @@ const ApiOperationContent: React.FC<ApiOperationProps> = ({
                           <div key={field.name} className="flex flex-col space-y-2">
                             <div className="flex items-center">
                               <span className="text-sm w-32 truncate">{field.name}{field.required && <span className="text-red-500 ml-1">*</span>}</span>
-                              <input
-                                type="file"
-                                ref={(el) => {
-                                  if (!fileInputRefs.current[field.name]) {
-                                    fileInputRefs.current[field.name] = React.createRef<HTMLInputElement>();
-                                  }
-                                  if (el) {
-                                    fileInputRefs.current[field.name].current = el;
-                                  }
-                                }}
-                                onChange={(e) => {
-                                  setFiles(prev => ({
-                                    ...prev,
-                                    [field.name]: e.target.files?.[0] || null
-                                  }));
-                                }}
-                                className="text-sm bg-gray-700 rounded px-2 py-1 flex-1"
-                              />
-                            </div>
-                            {files[field.name] && (
-                              <div className="flex items-center justify-between">
-                                <span className="text-xs text-gray-400 truncate">
-                                  {files[field.name]?.name}
-                                </span>
-                                <button 
-                                  type="button" 
-                                  className="text-xs text-red-500 hover:text-red-400"
-                                  onClick={() => {
-                                    setFiles(prev => ({
-                                      ...prev,
-                                      [field.name]: null
-                                    }));
-                                    if (fileInputRefs.current[field.name]) {
-                                      if (fileInputRefs.current[field.name]?.current) {
-                                        fileInputRefs.current[field.name].current.value = '';
-                                      }
+                              <div className="flex-1 flex items-center space-x-2">
+                                <input
+                                  type="file"
+                                  multiple={isMultipleFileField(field.name)}
+                                  ref={(el) => {
+                                    if (!fileInputRefs.current[field.name]) {
+                                      fileInputRefs.current[field.name] = React.createRef<HTMLInputElement | null>();
+                                    }
+                                    if (el) {
+                                      fileInputRefs.current[field.name].current = el;
                                     }
                                   }}
-                                >
-                                  清除
-                                </button>
+                                  onChange={(e) => {
+                                    if (isMultipleFileField(field.name)) {
+                                      // 多檔上傳
+                                      const fileList = e.target.files;
+                                      if (fileList && fileList.length > 0) {
+                                        const filesArray = Array.from(fileList);
+                                        setFiles(prev => ({
+                                          ...prev,
+                                          [field.name]: filesArray
+                                        }));
+                                      } else {
+                                        setFiles(prev => ({
+                                          ...prev,
+                                          [field.name]: null
+                                        }));
+                                      }
+                                    } else {
+                                      // 單檔上傳
+                                      setFiles(prev => ({
+                                        ...prev,
+                                        [field.name]: e.target.files?.[0] || null
+                                      }));
+                                    }
+                                  }}
+                                  className="text-sm bg-gray-700 rounded px-2 py-1 flex-1"
+                                />
+                                {files[field.name] && (
+                                  <button 
+                                    type="button" 
+                                    className="text-xs text-red-500 hover:text-red-400 whitespace-nowrap px-2 py-1"
+                                    onClick={() => {
+                                      setFiles(prev => ({
+                                        ...prev,
+                                        [field.name]: null
+                                      }));
+                                      if (fileInputRefs.current[field.name]) {
+                                        if (fileInputRefs.current[field.name]?.current) {
+                                          fileInputRefs.current[field.name].current!.value = '';
+                                        }
+                                      }
+                                    }}
+                                  >
+                                    清除
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                            {files[field.name] && (
+                              <div className="flex items-center justify-between bg-gray-700/30 p-2 rounded">
+                                <div className="flex items-center">
+                                  <FontAwesomeIcon icon={faFile} className="text-blue-400 mr-2" />
+                                  <span className="text-xs text-gray-400 truncate">
+                                    {Array.isArray(files[field.name]) 
+                                      ? `已選擇 ${(files[field.name] as File[]).length} 個檔案` 
+                                      : (files[field.name] as File).name}
+                                  </span>
+                                </div>
                               </div>
                             )}
                           </div>
@@ -789,7 +909,7 @@ const ApiOperationContent: React.FC<ApiOperationProps> = ({
                               {files[field.name] ? (
                                 <div className="flex items-center bg-gray-700/50 p-2 rounded">
                                   <FontAwesomeIcon icon={faFile} className="text-blue-400 mr-2" />
-                                  <span className="text-sm truncate flex-1">{files[field.name]?.name}</span>
+                                  <span className="text-sm truncate flex-1">{Array.isArray(files[field.name]) ? `已選擇 ${(files[field.name] as File[]).length} 個檔案` : (files[field.name] as File).name}</span>
                                   <button
                                     type="button"
                                     onClick={() => {
@@ -807,21 +927,38 @@ const ApiOperationContent: React.FC<ApiOperationProps> = ({
                                 <div className="flex items-center">
                                   <input
                                     type="file"
-                                    id={`file-${field.name}`}
-                                    className="hidden"
-                                    onChange={(e) => {
-                                      const file = e.target.files?.[0] || null;
-                                      setFiles(prev => ({
-                                        ...prev,
-                                        [field.name]: file
-                                      }));
-                                    }}
+                                    multiple={isMultipleFileField(field.name)}
                                     ref={(el) => {
                                       // 創建一個新的 RefObject 並賦值
                                       fileInputRefs.current[field.name] = {
-                                        current: el as HTMLInputElement
+                                        current: el as HTMLInputElement | null
                                       };
                                     }}
+                                    onChange={(e) => {
+                                      if (isMultipleFileField(field.name)) {
+                                        // 多檔上傳
+                                        const fileList = e.target.files;
+                                        if (fileList && fileList.length > 0) {
+                                          const filesArray = Array.from(fileList);
+                                          setFiles(prev => ({
+                                            ...prev,
+                                            [field.name]: filesArray
+                                          }));
+                                        } else {
+                                          setFiles(prev => ({
+                                            ...prev,
+                                            [field.name]: null
+                                          }));
+                                        }
+                                      } else {
+                                        // 單檔上傳
+                                        setFiles(prev => ({
+                                          ...prev,
+                                          [field.name]: e.target.files?.[0] || null
+                                        }));
+                                      }
+                                    }}
+                                    className="text-sm bg-gray-700 rounded px-2 py-1 flex-1"
                                   />
                                   <button
                                     type="button"
@@ -865,14 +1002,21 @@ const ApiOperationContent: React.FC<ApiOperationProps> = ({
                   {/* 發送按鈕 */}
                   <div className="flex justify-center mt-4">
                     <Button
-                      variant="test"
-                      size="md"
-                      icon={faPaperPlane}
-                      loading={loading}
                       onClick={handleSendRequest}
-                      className="px-6 py-2.5"
+                      disabled={loading}
+                      className={`px-4 py-2 ${isFileUpload ? 'bg-blue-600 hover:bg-blue-700' : 'bg-green-600 hover:bg-green-700'} text-white rounded-md flex items-center`}
                     >
-                      測試請求
+                      {loading ? (
+                        <>
+                          <Spinner size="sm" className="mr-2" />
+                          處理中...
+                        </>
+                      ) : (
+                        <>
+                          <FontAwesomeIcon icon={isFileUpload ? faUpload : faPaperPlane} className="mr-2" />
+                          {isFileUpload ? '上傳檔案並發送請求' : '發送請求'}
+                        </>
+                      )}
                     </Button>
                   </div>
                   
