@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
   faSignIn, 
@@ -47,6 +47,8 @@ const SwaggerUI: React.FC<SwaggerUIProps> = ({
   const [rawSwaggerContent, setRawSwaggerContent] = useState<string>('');
   const [showRawContent, setShowRawContent] = useState<boolean>(false);
   const [serverHost, setServerHost] = useState<string>('');
+  const [recentUrlsDropdownOpen, setRecentUrlsDropdownOpen] = useState<boolean>(false);
+  const recentUrlsRef = useRef<HTMLDivElement>(null);
 
   // 加載Swagger文檔
   const loadSwaggerDoc = async (url: string) => {
@@ -236,6 +238,20 @@ const SwaggerUI: React.FC<SwaggerUIProps> = ({
     }
   }, [defaultSwaggerUrl]);
 
+  // 點擊外部時關閉最近使用的URL下拉菜單
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (recentUrlsRef.current && !recentUrlsRef.current.contains(event.target as Node)) {
+        setRecentUrlsDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
   return (
     <div className={`container-responsive py-4 animate-fade-in ${className}`}>
       <div className="glass-morphism p-4 mb-3 flex flex-wrap items-center justify-between gap-3 card-hover">
@@ -350,27 +366,33 @@ const SwaggerUI: React.FC<SwaggerUIProps> = ({
           </Button>
           
           {getRecentUrls().length > 0 && (
-            <div className="relative group">
+            <div className="relative group" ref={recentUrlsRef}>
               <Button
                 variant="glass"
                 icon={faHistory}
                 size="sm"
+                onClick={() => setRecentUrlsDropdownOpen(!recentUrlsDropdownOpen)}
               >
                 最近
               </Button>
-              <div className="absolute right-0 mt-1 w-64 bg-gray-800 rounded-md shadow-lg overflow-hidden z-10 hidden group-hover:block">
-                <div className="py-1">
-                  {getRecentUrls().map((url, index) => (
-                    <button
-                      key={index}
-                      className="w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-gray-700 truncate"
-                      onClick={() => loadRecentUrl(url)}
-                    >
-                      {url}
-                    </button>
-                  ))}
+              {recentUrlsDropdownOpen && (
+                <div className="absolute right-0 mt-1 w-64 bg-gray-800 rounded-md shadow-lg overflow-hidden z-10">
+                  <div className="py-1">
+                    {getRecentUrls().map((url, index) => (
+                      <button
+                        key={index}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-gray-700 truncate"
+                        onClick={() => {
+                          loadRecentUrl(url);
+                          setRecentUrlsDropdownOpen(false);
+                        }}
+                      >
+                        {url}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
         </div>

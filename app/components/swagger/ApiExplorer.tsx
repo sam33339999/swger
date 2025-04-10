@@ -209,6 +209,8 @@ const ApiExplorer: React.FC<ApiExplorerProps> = ({
               icon={faSearch}
               fullWidth
               variant="glass"
+              showClearButton={searchQuery.length > 0}
+              onClear={() => setSearchQuery('')}
             />
           </div>
           

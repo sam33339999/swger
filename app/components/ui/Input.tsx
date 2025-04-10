@@ -2,6 +2,7 @@ import React, { forwardRef } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { IconDefinition } from '@fortawesome/fontawesome-svg-core';
 import * as RadixForm from '@radix-ui/react-form';
+import { faTimes } from '@fortawesome/free-solid-svg-icons';
 
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string;
@@ -16,6 +17,8 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   errorClassName?: string;
   name?: string;
   useRadixForm?: boolean;
+  onClear?: () => void; // 新增清除按鈕回調函數
+  showClearButton?: boolean; // 是否顯示清除按鈕
 }
 
 const Input = forwardRef<HTMLInputElement, InputProps>(
@@ -33,6 +36,8 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
       errorClassName = '',
       name,
       useRadixForm = false,
+      onClear,
+      showClearButton,
       ...props
     },
     ref
@@ -50,8 +55,11 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
     // 錯誤樣式
     const errorClasses = error ? 'ring-danger focus:ring-danger' : '';
     
-    // 圖標樣式
-    const iconClasses = icon ? (iconPosition === 'left' ? 'pl-10' : 'pr-10') : '';
+    // 圖標和清除按鈕樣式
+    const hasRightElement = iconPosition === 'right' && icon || showClearButton;
+    const hasLeftElement = iconPosition === 'left' && icon;
+    
+    const paddingClasses = `${hasLeftElement ? 'pl-10' : ''} ${hasRightElement ? 'pr-10' : ''}`;
     
     // 寬度樣式
     const widthClasses = fullWidth ? 'w-full' : '';
@@ -59,25 +67,44 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
     // 標準輸入框內容
     const inputContent = (
       <div className="relative">
-        {icon && (
-          <div className={`absolute inset-y-0 ${iconPosition === 'left' ? 'left-0' : 'right-0'} flex items-center ${iconPosition === 'left' ? 'pl-3' : 'pr-3'} pointer-events-none`}>
+        {icon && iconPosition === 'left' && (
+          <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
             <FontAwesomeIcon icon={icon} className="text-gray-400 h-4 w-4" />
           </div>
         )}
+        
         {useRadixForm ? (
           <RadixForm.Control asChild>
             <input
               ref={ref}
-              className={`${baseClasses} ${variantClasses[variant]} ${errorClasses} ${iconClasses} ${widthClasses} ${className}`}
+              className={`${baseClasses} ${variantClasses[variant]} ${errorClasses} ${paddingClasses} ${widthClasses} ${className}`}
               {...props}
             />
           </RadixForm.Control>
         ) : (
           <input
             ref={ref}
-            className={`${baseClasses} ${variantClasses[variant]} ${errorClasses} ${iconClasses} ${widthClasses} ${className}`}
+            className={`${baseClasses} ${variantClasses[variant]} ${errorClasses} ${paddingClasses} ${widthClasses} ${className}`}
             {...props}
           />
+        )}
+        
+        {icon && iconPosition === 'right' && (
+          <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+            <FontAwesomeIcon icon={icon} className="text-gray-400 h-4 w-4" />
+          </div>
+        )}
+        
+        {/* 清除按鈕 */}
+        {showClearButton && onClear && (
+          <button
+            type="button"
+            onClick={onClear}
+            className="absolute inset-y-0 right-0 flex items-center pr-3 cursor-pointer"
+            aria-label="清除輸入"
+          >
+            <FontAwesomeIcon icon={faTimes} className="text-gray-400 hover:text-gray-600 h-3.5 w-3.5 transition-colors" />
+          </button>
         )}
       </div>
     );
