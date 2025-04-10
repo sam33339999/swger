@@ -4,6 +4,7 @@ import "./globals.css";
 import { config } from '@fortawesome/fontawesome-svg-core';
 import '@fortawesome/fontawesome-svg-core/styles.css';
 import { NotificationProvider } from './components/ui/Notification';
+import ClientNotesWrapper from './components/notepad/ClientNotesWrapper';
 
 // 防止Font Awesome圖標閃爍
 config.autoAddCss = false;
@@ -36,6 +37,7 @@ export default function RootLayout({
       >
         <NotificationProvider>
           {children}
+          <ClientNotesWrapper />
         </NotificationProvider>
       </body>
     </html>
