@@ -13,12 +13,14 @@ import {
   faShieldAlt,
   faUpload,
   faFile,
-  faTimes
+  faTimes,
+  faCopy
 } from '@fortawesome/free-solid-svg-icons';
 import { SwaggerDocument, ApiResponse } from '../../types';
 import { getOperation, getRequestExample, getServerUrl } from '../../utils/swagger';
 import { sendApiRequest } from '../../utils/api';
 import { isFileUploadOperation, getFileUploadFields } from '../../utils/fileUpload';
+import { useNotification } from '../ui/Notification';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import Tabs from '../ui/Tabs';
@@ -358,7 +360,7 @@ const ApiOperationContent: React.FC<ApiOperationProps> = ({
               } else {
                 // 單檔上傳
                 console.log(`Appending single file ${key}:`, file.name);
-                formData.append(key, file);
+                  formData.append(key, file);
               }
             }
           });
@@ -1301,11 +1303,43 @@ const JsonTreeView = ({ data }: { data: unknown }) => {
 
 // 自定義 JSON 表格視圖組件
 const JsonTableView = ({ data }: { data: unknown }) => {
+  const { showNotification } = useNotification();
+
+  // 複製值到剪貼板
+  const handleCopyValue = (value: unknown) => {
+    const stringValue = formatUnknownData(value);
+    navigator.clipboard.writeText(stringValue)
+      .then(() => {
+        showNotification({
+          type: 'success',
+          message: '已複製值到剪貼板',
+          duration: 2000
+        });
+      })
+      .catch(err => {
+        console.error('無法複製到剪貼板:', err);
+        showNotification({
+          type: 'error',
+          message: '複製失敗',
+          duration: 2000
+        });
+      });
+  };
+
   const renderTable = (obj: unknown, parentKey = ''): React.ReactNode => {
     if (!obj || typeof obj !== 'object') {
       return (
         <tr key={parentKey}>
-          <td className="border border-gray-700 px-4 py-2">{parentKey}</td>
+          <td className="border border-gray-700 px-4 py-2 flex items-center">
+            <span className="mr-2">{parentKey}</span>
+            <button
+              onClick={() => handleCopyValue(obj)}
+              className="p-1 text-gray-400 hover:text-blue-400 transition-colors"
+              title="複製值"
+            >
+              <FontAwesomeIcon icon={faCopy} className="h-3.5 w-3.5" />
+            </button>
+          </td>
           <td className="border border-gray-700 px-4 py-2">
             {obj === null ? (
               <span className="text-blue-400">null</span>
@@ -1332,7 +1366,16 @@ const JsonTableView = ({ data }: { data: unknown }) => {
       if (value === null || typeof value !== 'object') {
         return (
           <tr key={newKey}>
-            <td className="border border-gray-700 px-4 py-2">{newKey}</td>
+            <td className="border border-gray-700 px-4 py-2 flex items-center">
+              <span className="mr-2">{newKey}</span>
+              <button
+                onClick={() => handleCopyValue(value)}
+                className="p-1 text-gray-400 hover:text-blue-400 transition-colors"
+                title="複製值"
+              >
+                <FontAwesomeIcon icon={faCopy} className="h-3.5 w-3.5" />
+              </button>
+            </td>
             <td className="border border-gray-700 px-4 py-2">
               {value === null ? (
                 <span className="text-blue-400">null</span>
