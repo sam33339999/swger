@@ -153,21 +153,57 @@ const ApiExplorer: React.FC<ApiExplorerProps> = ({
     const baseUrl = swagger.servers && swagger.servers[0] ? swagger.servers[0].url : '';
     const fullUrl = baseUrl + url;
     
-    navigator.clipboard.writeText(fullUrl)
-      .then(() => {
-        showNotification({
-          type: 'success',
-          message: '已複製URL到剪貼板',
-          duration: 2000
+    // 檢查是否在瀏覽器環境以及剪貼板API是否可用
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(fullUrl)
+        .then(() => {
+          showNotification({
+            type: 'success',
+            message: '已複製URL到剪貼板',
+            duration: 2000
+          });
+        })
+        .catch((err) => {
+          console.error('無法複製到剪貼板:', err);
+          showNotification({
+            type: 'error',
+            message: '複製失敗',
+            duration: 2000
+          });
         });
-      })
-      .catch(() => {
+    } else {
+      // 剪貼板API不可用時的備用方法
+      try {
+        // 創建一個臨時文本區域元素
+        const textarea = document.createElement('textarea');
+        textarea.value = fullUrl;
+        textarea.style.position = 'fixed';  // 避免滾動頁面
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        
+        // 嘗試使用document.execCommand執行複製操作
+        const successful = document.execCommand('copy');
+        document.body.removeChild(textarea);
+        
+        if (successful) {
+          showNotification({
+            type: 'success',
+            message: '已複製URL到剪貼板',
+            duration: 2000
+          });
+        } else {
+          throw new Error('Copy command was unsuccessful');
+        }
+      } catch (err) {
+        console.error('備用複製方法失敗:', err);
         showNotification({
           type: 'error',
-          message: '複製失敗',
+          message: '複製失敗 - 瀏覽器不支持複製功能',
           duration: 2000
         });
-      });
+      }
+    }
   };
   
   return (
