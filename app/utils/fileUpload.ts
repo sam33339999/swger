@@ -68,11 +68,16 @@ export const prepareFileUploadConfig = (
   config: AxiosRequestConfig,
   formData: FormData
 ): AxiosRequestConfig => {
-  // 設置正確的 Content-Type 頭部
+  // 創建新的配置對象，移除現有的 Content-Type 頭部
+  // 讓瀏覽器自動設置 multipart/form-data 和 boundary
   const headers = {
-    ...config.headers,
-    'Content-Type': 'multipart/form-data',
+    ...config.headers
   };
+  
+  // 刪除可能存在的 Content-Type，讓瀏覽器自動處理
+  if (headers && 'Content-Type' in headers) {
+    delete headers['Content-Type'];
+  }
   
   return {
     ...config,
@@ -94,7 +99,7 @@ export const isFileUploadOperation = (operation: SwaggerOperation): boolean => {
   
   // 如果路徑、摘要或描述中包含特定的關鍵字，可能是檔案上傳操作
   const keywordsInPath = [
-    'upload', 'file', '上傳', '檔案', '文件', 'layout-files', '佈局文件'
+    'upload', 'file', '上傳', '檔案', '文件'
   ];
   
   if (keywordsInPath.some(keyword => 
@@ -189,12 +194,16 @@ export const isFileUploadOperation = (operation: SwaggerOperation): boolean => {
 /**
  * 從 Swagger 操作中獲取檔案上傳欄位信息
  * @param operation Swagger 操作對象
- * @returns 檔案上傳欄位信息數組
+ * @returns 檔案上傳欄位信息數組，包含字段名稱、是否必要，以及是否支持多文件
  */
-export const getFileUploadFields = (operation: SwaggerOperation): Array<{name: string, required: boolean}> => {
+export const getFileUploadFields = (operation: SwaggerOperation): Array<{
+  name: string, 
+  required: boolean,
+  isMultiple: boolean  // 新增：標記是否支持多檔案上傳
+}> => {
   if (!isFileUploadOperation(operation)) return [];
   
-  const fields: Array<{name: string, required: boolean}> = [];
+  const fields: Array<{name: string, required: boolean, isMultiple: boolean}> = [];
   
   // 檢查parameters中是否有file類型
   if (operation?.parameters) {
@@ -208,10 +217,21 @@ export const getFileUploadFields = (operation: SwaggerOperation): Array<{name: s
     );
     
     if (fileParams && fileParams.length > 0) {
-      fields.push(...fileParams.map((param) => ({
-        name: param.name,
-        required: param.required || false
-      })));
+      fields.push(...fileParams.map((param) => {
+        const formDataParam = param as unknown as FormDataParameter;
+        // 檢查是否為數組類型 (多檔案上傳)
+        const isMultiple = formDataParam.type === 'array' || 
+                          (formDataParam.schema?.type === 'array') ||
+                          // 檢查字段名稱暗示多文件（例如 "files[]" 或 "files"）
+                          param.name.endsWith('[]') ||
+                          param.name.toLowerCase().endsWith('s');
+
+        return {
+          name: param.name,
+          required: param.required || false,
+          isMultiple
+        };
+      }));
     }
   }
   
@@ -228,10 +248,20 @@ export const getFileUploadFields = (operation: SwaggerOperation): Array<{name: s
               (property.type === 'file') ||
               (propName.toLowerCase().includes('file'))
             )
-            .map(([name]) => ({
-              name,
-              required: schema.required?.includes(name) || false
-            }));
+            .map(([name, property]) => {
+              // 檢查是否為數組類型 (多檔案上傳)
+              const isMultiple = property.type === 'array' || 
+                                 (property.items !== undefined) ||
+                                 // 檢查字段名稱暗示多文件
+                                 name.endsWith('[]') ||
+                                 (name.toLowerCase().endsWith('s') && name.toLowerCase() !== 'files');
+              
+              return {
+                name,
+                required: schema.required?.includes(name) || false,
+                isMultiple
+              };
+            });
           
           fields.push(...fileFields);
         }
@@ -241,20 +271,39 @@ export const getFileUploadFields = (operation: SwaggerOperation): Array<{name: s
   
   // 如果沒有找到任何字段，但確定是檔案上傳操作，則添加一個默認字段
   if (fields.length === 0) {
-    // 根據 API 路徑嘗試推斷文件字段名稱
+    // 根據 API 路徑嘗試推斷文件字段名稱和是否為多檔案上傳
     const operationObj = operation as unknown;
     const pathValue = typeof operationObj === 'object' && operationObj !== null 
       ? (operationObj as Record<string, unknown>).path 
       : '';
     const path = typeof pathValue === 'string' ? pathValue : '';
     
+    // 檢查路徑名稱是否暗示多檔案上傳
+    const isMultiple = path.includes('batch') || 
+                       path.includes('multi') || 
+                       path.includes('files') || 
+                       path.includes('批量') || 
+                       path.includes('多檔案');
+    
     if (path.includes('layout-files') || path.includes('layout')) {
-      fields.push({ name: 'file', required: true });
+      fields.push({ 
+        name: isMultiple ? 'files' : 'file', 
+        required: true,
+        isMultiple 
+      });
     } else if (path.includes('upload')) {
-      fields.push({ name: 'file', required: true });
+      fields.push({ 
+        name: isMultiple ? 'files' : 'file', 
+        required: true,
+        isMultiple 
+      });
     } else {
       // 添加默認字段
-      fields.push({ name: 'file', required: true });
+      fields.push({ 
+        name: 'file', 
+        required: true,
+        isMultiple: false 
+      });
     }
   }
   

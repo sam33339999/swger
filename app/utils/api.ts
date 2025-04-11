@@ -102,31 +102,31 @@ export const sendApiRequest = async (
       headers['Authorization'] = `Bearer ${token}`;
     }
     
-    // 準備請求配置
-    const config: AxiosRequestConfig = {
-      method: method.toLowerCase(),
-      url,
-      headers,
-      data: body,
-    };
+    // 檢查是否需要檔案上傳
+    const hasFiles = files && Object.keys(files).length > 0 && 
+                     Object.values(files).some(file => file !== undefined && file !== null);
     
-    // 處理檔案上傳 (如果有檔案)
-    if (files && Object.keys(files).length > 0) {
-      console.log('處理檔案上傳...');
+    let requestConfig: AxiosRequestConfig;
+    
+    // 處理檔案上傳場景（使用 FormData）
+    if (hasFiles) {
+      console.log('檢測到檔案上傳請求，使用 FormData');
       
       // 創建 FormData 對象
       const formData = new FormData();
       
       // 添加檔案
       let fileAdded = false;
-      Object.entries(files).forEach(([key, value]) => {
+      Object.entries(files!).forEach(([key, value]) => {
         if (value) {
           if (Array.isArray(value)) {
             // 處理多檔案上傳
             value.forEach(file => {
-              console.log(`添加多檔案 ${key}:`, file.name);
-              formData.append(key, file);
-              fileAdded = true;
+              if (file && file instanceof File) {
+                console.log(`添加多檔案 ${key}:`, file.name);
+                formData.append(`${key}`, file);
+                fileAdded = true;
+              }
             });
           } else {
             // 處理單檔案上傳
@@ -137,38 +137,102 @@ export const sendApiRequest = async (
         }
       });
       
-      // 如果有其他數據，添加到 FormData
+      // 處理額外的JSON數據，智能轉換為FormData格式
       if (body && typeof body === 'object' && !(body instanceof FormData)) {
         console.log('添加額外的表單數據:', body);
-        Object.entries(body as Record<string, unknown>).forEach(([key, value]) => {
-          if (value !== undefined && value !== null) {
-            formData.append(key, typeof value === 'object' ? JSON.stringify(value) : String(value));
+        
+        const processValue = (key: string, value: unknown, parentKey: string = ''): void => {
+          const fieldKey = parentKey ? `${parentKey}.${key}` : key;
+          
+          if (value === undefined || value === null) {
+            return;
+          } else if (typeof value === 'object' && !(value instanceof File) && !Array.isArray(value)) {
+            // 處理嵌套對象
+            Object.entries(value as Record<string, unknown>).forEach(([subKey, subValue]) => {
+              processValue(subKey, subValue, fieldKey);
+            });
+          } else if (Array.isArray(value)) {
+            // 處理數組，使用 name[] 格式添加多個值
+            if (value.length === 0) {
+              // 表示空數組
+              formData.append(`${fieldKey}[]`, '');
+            } else {
+              value.forEach((item, index) => {
+                if (typeof item === 'object' && !(item instanceof File)) {
+                  // 复杂對象數组，轉為 JSON
+                  formData.append(`${fieldKey}[${index}]`, JSON.stringify(item));
+                } else if (item instanceof File) {
+                  // 檔案數組
+                  formData.append(`${fieldKey}[]`, item);
+                } else {
+                  // 基本類型數組
+                  formData.append(`${fieldKey}[]`, String(item));
+                }
+              });
+            }
+          } else if (value instanceof File) {
+            // 檔案對象
+            formData.append(fieldKey, value);
+          } else {
+            // 基本類型
+            formData.append(fieldKey, String(value));
           }
+        };
+        
+        // 處理主體JSON數據
+        Object.entries(body as Record<string, unknown>).forEach(([key, value]) => {
+          processValue(key, value);
         });
       }
       
-      // 如果確實有添加檔案，則使用 FormData
-      if (fileAdded) {
+      // 如果確實有添加檔案或表單數據，則使用 FormData
+      if (fileAdded || formData.entries().next().done === false) {
         // 重要: 刪除 Content-Type 頭部，讓瀏覽器自動設置 multipart boundary
         delete headers['Content-Type'];
         
-        // 更新請求配置
-        config.data = formData;
+        requestConfig = {
+          method: method.toLowerCase(),
+          url,
+          headers,
+          data: formData
+        };
+        
         console.log('FormData 已設置為請求體');
       } else {
-        console.log('沒有檔案被添加，使用普通請求體');
+        // 沒有實際添加文件，回退到標準JSON請求
+        console.log('沒有檔案被添加，使用標準 JSON 請求');
+        requestConfig = {
+          method: method.toLowerCase(),
+          url,
+          headers: {
+            ...headers,
+            'Content-Type': 'application/json'
+          },
+          data: body
+        };
       }
+    } else {
+      // 標準 JSON 請求
+      requestConfig = {
+        method: method.toLowerCase(),
+        url,
+        headers: {
+          ...headers,
+          'Content-Type': headers['Content-Type'] || 'application/json'
+        },
+        data: body
+      };
     }
     
     // 發送請求
-    const response = await axios(config);
+    const response = await axios(requestConfig);
     
     // 添加到歷史記錄
     addRequestToHistory({
       method,
       url,
-      headers,
-      body,
+      headers: requestConfig.headers as Record<string, string>,
+      body: requestConfig.data,
       response: response.data,
       status: response.status,
     });

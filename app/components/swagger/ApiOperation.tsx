@@ -212,50 +212,44 @@ const ApiOperationContent: React.FC<ApiOperationProps> = ({
             validFiles![key] = file;
           }
         });
+        
+        // 改進 JSON 解析邏輯，確保即使是空對象也能被正確處理
         try {
-          body = requestBody && requestBody.trim() !== '{}' ? JSON.parse(requestBody) : undefined;
+          // 先檢查是否有 JSON 數據需要處理
+          if (requestBody && requestBody.trim() !== '') {
+            // 嘗試解析 JSON
+            body = JSON.parse(requestBody);
+          } else {
+            // 如果沒有提供 JSON 或為空字符串，則使用空對象
+            body = {};
+          }
         } catch (e) {
-          // Parsing error, using undefined body
+          // 解析錯誤時，記錄錯誤但仍然嘗試使用原始文本作為 body
           console.error('Invalid JSON form data:', e);
-          body = undefined;
+          // 如果無法解析為 JSON，則將原始字符串作為數據傳遞
+          body = requestBody.trim() !== '' ? { data: requestBody } : {};
         }
+
+        // 篩選出實際有檔案的項目
         const filteredFiles: Record<string, File | File[]> = {};
         Object.entries(validFiles).forEach(([key, value]) => {
           if (value !== null) {
             filteredFiles[key] = value;
           }
         });
-        const formData = new FormData();
-        if (filteredFiles) {
-          Object.entries(filteredFiles).forEach(([key, file]) => {
-            if (file) {
-              if (Array.isArray(file)) {
-                file.forEach((f) => {
-                  formData.append(key, f);
-                });
-              } else {
-                formData.append(key, file);
-              }
-            }
-          });
-        }
-        if (body) {
-          Object.entries(body).forEach(([key, value]) => {
-            if (value !== undefined && value !== null) {
-              formData.append(key, String(value));
-            }
-          });
-        }
-        const headers = { ...requestHeaders };
-        delete headers['Content-Type'];
-        const result = await sendApiRequest(method, url, headers, formData, filteredFiles);
+        
+        // 更明確地記錄發送的內容
+        console.log('發送的檔案:', filteredFiles);
+        console.log('發送的 JSON 數據:', body);
+        
+        // 直接使用 sendApiRequest，同時傳遞 body 和 files
+        const result = await sendApiRequest(method, url, requestHeaders, body, filteredFiles);
         setResponse(result);
         return;
       } else {
         try {
           body = requestBody ? JSON.parse(requestBody) : undefined;
         } catch (e) {
-          // Parsing error, using undefined body
           console.error('Invalid JSON form data:', e);
           body = requestBody;
         }
@@ -698,7 +692,7 @@ const ApiOperationContent: React.FC<ApiOperationProps> = ({
                 <div className="space-y-4 bg-gray-800/30 p-4 rounded-md">
                   <div className="text-sm text-amber-400 flex items-center mb-2">
                     <FontAwesomeIcon icon={faUpload} className="mr-2" />
-                    <span>此 API 需要檔案上傳</span>
+                    <span>此 API 可能需要檔案上傳</span>
                   </div>
                   {fileUploadFields.map((field) => (
                     <div key={field.name} className="space-y-1">
